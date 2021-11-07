@@ -1,0 +1,66 @@
+name: Rust
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        type: [debug, release]
+
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Update Toolchain (Run cargo)
+      run: cargo
+
+    - name: Use rust cache (Release)
+      if: matrix.type == 'release'
+      uses: Swatinem/rust-cache@v1
+      with:
+          key: ${{ secrets.key }}
+          
+    - name: Use rust cache (Debug)
+      if: matrix.type == 'debug'
+      uses: Swatinem/rust-cache@v1
+      with:
+          key: ${{ secrets.key }}-${{ matrix.type }}
+    
+    - name: Get CMake and Ninja (Windows only)
+      if: matrix.os == 'windows-latest'
+      uses: lukka/get-cmake@v3.21.2
+      
+    - name: Build Release
+      if: matrix.type == 'release'
+      run: cargo build --verbose --release
+      
+    - name: Build Debug
+      if: matrix.type == 'debug'
+      run: cargo build --verbose
+
+    - name: Test
+      run: cargo test --verbose
+      
+    - name: Upload a Build Artifact
+      uses: actions/upload-artifact@v2.2.4
+      with:
+        name: ${{ matrix.os }}-${{ matrix.type }}
+        path: |
+          target/release/kosemtic_app.exe
+          target/release/kosemtic_app
+          target/debug/kosemtic_app.exe
+          target/debug/kosemtic_app.pdb
+          target/debug/kosemtic_app
