@@ -3,6 +3,15 @@ name = "kosmetic_zx"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
+tracing = { version = "0.1.29", optional = true }
+tracing-tracy = { version = "0.7.0", optional = true }
+tracing-subscriber = { version = "0.2.0", optional = true }
+
+[features]
+trace-deps = ["tracing", "tracing-tracy", "tracing-subscriber"]
+trace-memory = ["trace-deps"]
+trace-bus = ["trace-deps"]
+trace-cpu = ["trace-deps"]
+trace-ula = ["trace-deps"]
+trace-all = ["trace-memory","trace-cpu","trace-bus","trace-ula","trace-deps"]
