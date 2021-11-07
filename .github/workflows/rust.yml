@@ -53,17 +53,14 @@ jobs:
 
     - name: Test
       run: cargo test --verbose
-      
-    - name: List all files
-      run: ls target/**/**
 
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v2.2.4
       with:
         name: ${{ matrix.os }}-${{ matrix.type }}
         path: |
-          target/release/kosemtic_app.exe
-          target/release/kosemtic_app
-          target/debug/kosemtic_app.exe
-          target/debug/kosemtic_app.pdb
-          target/debug/kosemtic_app
+          target/release/kosmetic_app.exe
+          target/release/kosmetic_app
+          target/debug/kosmetic_app.exe
+          target/debug/kosmetic_app.pdb
+          target/debug/kosmetic_app
