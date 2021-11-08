@@ -13,6 +13,7 @@ extern crate tracing_subscriber;
 #[cfg(feature = "trace-deps")]
 extern crate tracing_chrome;
 
+#[cfg(feature = "trace-deps")]
 static INIT: Once = Once::new();
 
 #[cfg(feature = "trace-deps")]
