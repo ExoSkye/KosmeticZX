@@ -53,7 +53,23 @@ jobs:
 
     - name: Test
       run: cargo test --verbose
-
+      
+    - name: Setup Profiling
+      if: matrix.os == 'ubuntu-latest'
+      uses: actions/checkout@v2
+      with:
+        repository: 'https://github.com/wolfpld/tracy.git'
+        submodules: 'recursive'
+        ref: 'v0.7.8'
+        path: 'tracy'
+        
+    - name: Build Tracy
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        cd tracy/profiler/build/unix
+        make release
+      
+      
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v2.2.4
       with:
