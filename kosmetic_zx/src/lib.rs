@@ -11,19 +11,18 @@ extern crate tracing;
 #[cfg(feature = "trace-deps")]
 extern crate tracing_subscriber;
 #[cfg(feature = "trace-deps")]
-extern crate tracing_tracy;
+extern crate tracing_chrome;
 
 static INIT: Once = Once::new();
 
 #[cfg(feature = "trace-deps")]
 fn init_logging() {
     INIT.call_once( || {
-        use tracing_subscriber::layer::SubscriberExt;
+        use tracing_chrome::ChromeLayerBuilder;
+        use tracing_subscriber::{registry::Registry, prelude::*};
 
-        tracing::subscriber::set_global_default(
-             tracing_subscriber::registry()
-                 .with(tracing_tracy::TracyLayer::new()),
-         ).expect("set up the subscriber");
+        let (chrome_layer, _guard) = ChromeLayerBuilder::new().build();
+        tracing_subscriber::registry().with(chrome_layer).init();
     });
 }
 
