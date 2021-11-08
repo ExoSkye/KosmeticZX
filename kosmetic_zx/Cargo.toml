@@ -5,11 +5,11 @@ edition = "2021"
 
 [dependencies]
 tracing = { version = "0.1.29", optional = true }
-tracing-tracy = { version = "0.7.0", optional = true }
+tracing-chrome = { version = "0.3.1", optional = true }
 tracing-subscriber = { version = "0.2.0", optional = true }
 
 [features]
-trace-deps = ["tracing", "tracing-tracy", "tracing-subscriber"]
+trace-deps = ["tracing", "tracing-chrome", "tracing-subscriber"]
 trace-memory = ["trace-deps"]
 trace-bus = ["trace-deps"]
 trace-cpu = ["trace-deps"]
