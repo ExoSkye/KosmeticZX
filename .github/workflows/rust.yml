@@ -45,7 +45,7 @@ jobs:
       
     - name: Build Release
       if: matrix.type == 'release'
-      run: cargo build --verbose --release
+      run: cargo build --verbose --release --features tracing
       
     - name: Build Debug
       if: matrix.type == 'debug'
