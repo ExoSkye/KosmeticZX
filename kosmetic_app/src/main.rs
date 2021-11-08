@@ -17,7 +17,7 @@ fn main() {
     bus.add_device(Arc::new(Mutex::new(ularam)));
     bus.add_device(Arc::new(Mutex::new(rom)));
 
-    loop {
+    for _ in 0..100 {
         for i in 0..0xFFFF {
             bus.write(i as Address, 0xFF);
         }
