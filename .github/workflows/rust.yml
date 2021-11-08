@@ -66,9 +66,10 @@ jobs:
     - name: Build Tracy
       if: matrix.os == 'ubuntu-latest'
       run: |
+        sudo apt install libglfw3-dev libfreetype6-dev libcapstone-dev libgtk-3-dev
         cd tracy/profiler/build/unix
         make release
-      
+        ls **/**
       
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v2.2.4
