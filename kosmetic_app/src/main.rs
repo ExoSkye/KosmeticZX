@@ -1,34 +1,48 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, mpsc, Mutex, RwLock};
 
 use kosmetic_zx::memory::*;
 use kosmetic_zx::bus::*;
 use kosmetic_zx::cpu::*;
 use kosmetic_zx::common::*;
 use kosmetic_zx::*;
+use kosmetic_zx::clock::Clock;
+use kosmetic_zx::ula::Ula;
+use kosmetic_zx::video::VideoLayer;
+
+#[cfg(feature = "tracing")]
+fn init_logging() {
+    use tracing_subscriber::layer::SubscriberExt;
+
+    tracing::subscriber::set_global_default(
+        tracing_subscriber::registry()
+            .with(tracing_tracy::TracyLayer::new()),
+    ).expect("set up the subscriber");
+}
+
+#[cfg(not(feature = "tracing"))]
+fn init_logging() {}
 
 fn main() {
+    init_logging();
+
     let mut bus = Bus::new();
 
-    let cpuram = CPURam::new();
-    let ularam = ULARam::new();
-    let rom = Rom::new([0;0x4000]);
+    let cpuram = cpumem::CPURam::new();
+    let ularam = ulamem::ULARam::new();
+    let rom = rom::Rom::new([0;0x4000]);
+    let mut ula_clock = Ula::new(Some(()));
+    let (cpu_clock, _) = mpsc::channel();
 
-    bus.add_device(Arc::new(Mutex::new(cpuram)));
-    bus.add_device(Arc::new(Mutex::new(ularam)));
-    bus.add_device(Arc::new(Mutex::new(rom)));
+    let mut clock = Clock::new(cpu_clock.clone(),ula_clock.0.clone());
 
-    for _ in 0..100 {
-        for i in 0..0xFFFF {
-            bus.write(i as Address, 0xFF);
-        }
-        for i in 0..0xFFFF {
-            bus.read(i as Address);
-        }
-        for i in 0..0xFFFF {
-            bus.write(i as Address, 0x00);
-        }
-        for i in 0..0xFFFF {
-            bus.read(i as Address);
+    bus.write().unwrap().add_device(cpuram);
+    bus.write().unwrap().add_device(ularam);
+    bus.write().unwrap().add_device(rom);
+    bus.write().unwrap().add_device(ula_clock.1);
+
+    loop {
+        for i in 0..8 {
+            bus.write().unwrap().write(0, i as Byte, true);
         }
     }
 }

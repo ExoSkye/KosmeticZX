@@ -7,6 +7,9 @@ edition = "2021"
 
 [dependencies]
 kosmetic_zx = { path = "../kosmetic_zx", default-features = false }
+tracing-tracy = { version = "0.7.0", optional = true }
+tracing-subscriber = { version = "0.2", optional = true }
+tracing = { version = "0.1", optional = true }
 
 [features]
-tracing = ["kosmetic_zx/trace-all"]
+trace = ["kosmetic_zx/trace-all", "tracing-tracy", "tracing-subscriber", "tracing"]

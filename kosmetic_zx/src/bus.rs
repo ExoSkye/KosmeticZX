@@ -1,8 +1,28 @@
+#[cfg(feature = "hash-mem-map")]
 use std::collections::HashMap;
-use std::fmt::Debug;
-use std::sync::{Arc, Mutex};
-use crate::bus::RWEnum::Read;
+#[cfg(feature = "hash-mem-map")]
+use HashMap as memMap;
+
+#[cfg(feature = "btree-mem-map")]
+use std::collections::BTreeMap;
+#[cfg(feature = "btree-mem-map")]
+use BTreeMap as memMap;
+
+#[cfg(feature = "index-mem-map")]
+use indexmap::IndexMap;
+#[cfg(feature = "index-mem-map")]
+use IndexMap as memMap;
+
+#[cfg(feature = "dash-mem-map")]
+use dashmap::DashMap;
+#[cfg(feature = "dash-mem-map")]
+use DashMap as memMap;
+
+use crate::bus::RWEnum::{Read, Write};
 use crate::common::{Address, Byte};
+use std::fmt::Debug;
+use std::sync::{Arc, mpsc, RwLock};
+use std::sync::mpsc::Sender;
 
 #[cfg(feature = "trace-bus")]
 use tracing::*;
@@ -10,99 +30,160 @@ use tracing::*;
 #[derive(PartialEq, Debug)]
 pub enum RWEnum {
     Read,
-    Write
+    Write,
+}
+
+#[derive(Debug)]
+pub enum BusMessage {
+    GetRanges(Sender<BusMessage>),
+    RangesRet(Vec<Range>, Vec<Range>, Vec<Range>, Vec<Range>),
+    IOGet(Address, Sender<BusMessage>),
+    MemGet(Address, Sender<BusMessage>),
+    IOPut(Address, Byte, Sender<BusMessage>),
+    MemPut(Address, Byte, Sender<BusMessage>),
+    IOWriteOk(),
+    IOReadOk(Byte),
+    MemWriteOk(),
+    MemReadOk(Byte),
+    Err
 }
 
 #[derive(Debug, Clone)]
 pub struct Range(pub Address, pub Address);
 
-pub trait MmioDevice: Debug {
-    fn write(&mut self, address: Address, data: Byte) -> Result<(),()>;
-    fn read(&self, address: Address) -> Result<Byte,()>;
-    fn get_read_ranges(&self) -> Vec<Range>;
-    fn get_write_ranges(&self) -> Vec<Range>;
-    fn get_memory(&self) -> Option<Vec<Byte>>;
-}
-
 #[derive(Debug, Clone)]
 pub struct MapEntry {
-    pub(crate) device: Arc<Mutex<dyn MmioDevice>>,
-    pub(crate) range: Range
+    pub(crate) device: Sender<BusMessage>,
+    pub(crate) range: Range,
 }
 
 #[derive(Debug)]
 pub struct Bus {
-    pub(crate) read_ranges: HashMap<Address, MapEntry>,
-    pub(crate) write_ranges: HashMap<Address, MapEntry>
+    pub(crate) read_ranges: memMap<Address, MapEntry>,
+    pub(crate) write_ranges: memMap<Address, MapEntry>,
+    pub(crate) io_read_ranges: memMap<Address, MapEntry>,
+    pub(crate) io_write_ranges: memMap<Address, MapEntry>
 }
 
 impl Bus {
     #[cfg_attr(feature = "trace-bus", instrument(name = "Create Bus", skip_all))]
-    pub fn new() -> Bus {
-        crate::init_logging();
-        Bus {
-            read_ranges: HashMap::new(),
-            write_ranges: HashMap::new()
+    pub fn new() -> Arc<RwLock<Bus>> {
+        Arc::new(RwLock::new(Bus {
+            read_ranges: memMap::new(),
+            write_ranges: memMap::new(),
+            io_read_ranges: memMap::new(),
+            io_write_ranges: memMap::new(),
+        }))
+    }
+
+    #[cfg_attr(
+        feature = "trace-bus",
+        instrument(name = "Add device to bus", skip_all)
+    )]
+    pub fn add_device(&mut self, device: Sender<BusMessage>) {
+        let (tx, rx) = mpsc::channel();
+        device.send(BusMessage::GetRanges(tx)).unwrap();
+        let ranges = match rx.recv().unwrap() {
+            BusMessage::RangesRet(a, b, c, d) => ( a, b, c, d ),
+            _ => panic!("EEEEEEEEEEEEEEEEEEEEEE")
+        };
+
+        for range in ranges.0 {
+            self.read_ranges.insert(
+                range.0,
+                MapEntry {
+                    device: device.clone(),
+                    range,
+                },
+            );
+        }
+
+        for range in ranges.1 {
+            self.write_ranges.insert(
+                range.0,
+                MapEntry {
+                    device: device.clone(),
+                    range,
+                },
+            );
+        }
+
+        for range in ranges.2 {
+            self.io_read_ranges.insert(
+                range.0,
+                MapEntry {
+                    device: device.clone(),
+                    range,
+                },
+            );
+        }
+
+        for range in ranges.3 {
+            self.io_write_ranges.insert(
+                range.0,
+                MapEntry {
+                    device: device.clone(),
+                    range,
+                },
+            );
         }
     }
 
-    #[cfg_attr(feature = "trace-bus", instrument(name = "Add device to bus", skip_all))]
-    pub fn add_device<T: 'static + MmioDevice>(&mut self, device: Arc<Mutex<T>>) {
-        for range in device.lock().unwrap().get_read_ranges() {
-            self.read_ranges.insert(range.0, MapEntry {
-                device: device.clone(),
-                range
-            });
-        }
-
-        for range in device.lock().unwrap().get_write_ranges() {
-            self.write_ranges.insert(range.0, MapEntry {
-                device: device.clone(),
-                range
-            });
-        }
-    }
-
-    #[cfg_attr(feature = "trace-bus", instrument(name = "Get reference to bus", skip_all))]
-    pub fn get_ref(self) -> Arc<Mutex<Bus>> {
-        Arc::new(Mutex::new(self))
-    }
-
+    #[cfg(not(feature = "dash-mem-map"))]
     #[cfg_attr(feature = "trace-bus", instrument(name = "Write to bus", skip_all))]
-    pub fn write(&mut self, address: Address, data: Byte) -> Result<(),()> {
-        for key in self.write_ranges.clone().iter_mut().map(|(key, _)| { key }) {
+    pub fn write(&mut self, address: Address, data: Byte, io_bus: bool) -> Result<(), ()> {
+        for (key, val) in if io_bus == true {
+            self.io_write_ranges.iter_mut()
+        } else {
+            self.write_ranges.iter_mut()
+        } {
             if address >= *key {
-                if address < self.write_ranges.get(key).unwrap().range.1 {
-                    return self.write_ranges.get_mut(key).unwrap().device.lock().unwrap().write(address - key, data);
+                if address < val.range.1 {
+                    let (tx,rx) = mpsc::channel();
+                    val.device.send(if io_bus {
+                        BusMessage::IOPut(address - key, data, tx)
+                    } else {
+                        BusMessage::MemPut(address - key, data, tx)
+                    });
+                    let ret = rx.recv().unwrap();
+                    return match ret {
+                        BusMessage::IOWriteOk() => Ok(()),
+                        BusMessage::MemWriteOk() => Ok(()),
+                        _ => Err(())
+                    }
                 }
             }
         }
         Err(())
     }
 
+    #[cfg(not(feature = "dash-mem-map"))]
     #[cfg_attr(feature = "trace-bus", instrument(name = "Read from bus", skip_all))]
-    pub fn read(&self, address: Address) -> Result<Byte, ()> {
-        for key in self.read_ranges.clone().iter().map(|(key, _)| { key }) {
+    pub fn read(&self, address: Address, io_bus: bool) -> Result<Byte, ()> {
+        for (key, val) in if io_bus == true {
+            self.io_read_ranges.iter()
+        } else {
+            self.read_ranges.iter()
+        } {
             if address >= *key {
-                if address < self.read_ranges.get(key).unwrap().range.1 {
-                    return self.read_ranges.get(key).unwrap().device.lock().unwrap().read(address - key);
+                if address < val.range.1 {
+                    let (tx,rx) = mpsc::channel();
+                    val.device.send(if io_bus {
+                        BusMessage::IOGet(address - key, tx)
+                    } else {
+                        BusMessage::MemGet(address - key, tx)
+                    });
+
+                    let ret = rx.recv().unwrap();
+
+                    return match ret {
+                        BusMessage::IOReadOk(data) => Ok(data),
+                        BusMessage::MemReadOk(data) => Ok(data),
+                        _ => Err(())
+                    }
                 }
             }
         }
         Err(())
-    }
-
-    #[cfg_attr(feature = "trace-bus", instrument(name = "Get device from memory address", skip_all))]
-    pub fn get_device_at(&self, rw: RWEnum, address: Address) -> Option<Arc<Mutex<dyn MmioDevice>>> {
-        let map = if rw == Read { self.read_ranges.clone() } else { self.write_ranges.clone() };
-        for key in map.iter().map(|(key, _)| { key }) {
-            if address >= *key {
-                if address < map.get(key).unwrap().range.1 {
-                    return Some(map.get(key).unwrap().device.clone());
-                }
-            }
-        }
-        None
     }
 }
-
