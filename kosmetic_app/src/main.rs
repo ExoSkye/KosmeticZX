@@ -43,6 +43,6 @@ fn main() {
     bus.write().unwrap().add_device(ula_clock.1);
 
     loop {
-        bus.write().unwrap().write(0,  as Byte, true);
+        bus.write().unwrap().write(0, 2 as Byte, true);
     }
 }
