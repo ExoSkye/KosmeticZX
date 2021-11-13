@@ -39,7 +39,7 @@ impl Clock {
 
                 clk.ula_clock.send(ClockMessage::Tick).unwrap();
 
-                std::thread::sleep(Duration::from_nanos(1_000_000_000_u64 / CLK_FREQ));
+                //std::thread::sleep(Duration::from_nanos(1_000_000_000_u64 / CLK_FREQ));
 
                 i += 1;
 

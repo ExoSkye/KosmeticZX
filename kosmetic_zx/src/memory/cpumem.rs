@@ -40,6 +40,9 @@ impl CPURam {
                 },
                 BusMessage::IOPut(_, _, s) => s.send(BusMessage::Err).unwrap(),
                 BusMessage::IOGet(_, s) => s.send(BusMessage::Err).unwrap(),
+                BusMessage::GetRanges(s) => {
+                    s.send(BusMessage::RangesRet(vec![Range(0x8000,0xFFFF)],vec![Range(0x8000,0xFFFF)],vec![],vec![])).unwrap();
+                },
                 _ => {}
             }
         }

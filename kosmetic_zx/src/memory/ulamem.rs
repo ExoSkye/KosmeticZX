@@ -40,6 +40,9 @@ impl ULARam {
                 },
                 BusMessage::IOPut(_, _, s) => s.send(BusMessage::Err).unwrap(),
                 BusMessage::IOGet(_, s) => s.send(BusMessage::Err).unwrap(),
+                BusMessage::GetRanges(s) => {
+                    s.send(BusMessage::RangesRet(vec![Range(0x4000,0x7FFF)],vec![Range(0x4000,0x7FFF)],vec![],vec![])).unwrap();
+                },
                 _ => {}
             }
         }

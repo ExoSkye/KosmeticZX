@@ -1,4 +1,6 @@
 use std::sync::{Arc, mpsc, Mutex, RwLock};
+use std::thread::sleep;
+use std::time::Duration;
 
 use kosmetic_zx::memory::*;
 use kosmetic_zx::bus::*;
@@ -41,8 +43,6 @@ fn main() {
     bus.write().unwrap().add_device(ula_clock.1);
 
     loop {
-        for i in 0..8 {
-            bus.write().unwrap().write(0, i as Byte, true);
-        }
+        bus.write().unwrap().write(0,  as Byte, true);
     }
 }

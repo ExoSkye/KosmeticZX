@@ -53,13 +53,14 @@ impl Ula {
     pub fn loop_thing(&mut self) {
         loop {
             let clock_msg = self.clock_rx.try_recv();
+
             if clock_msg.is_ok() {
                 if clock_msg.unwrap() == ClockMessage::Tick {
                     self.event_loop();
                 } else { break; }
             }
 
-            self.message_loop();
+            self.check_message();
         }
     }
 
@@ -111,18 +112,19 @@ impl Ula {
         }
     }
 
-    fn message_loop(&mut self) {
-        loop {
-            match self.bus_rx.recv().unwrap() {
-                BusMessage::MemPut(_, _, s) => s.send(BusMessage::Err).unwrap(),
-                BusMessage::MemGet(_, s) => s.send(BusMessage::Err).unwrap(),
-                BusMessage::IOPut(_, b, s) => {
-                    self.border_color = self.convert_color(b);
-                    s.send(BusMessage::IOWriteOk());
-                },
-                BusMessage::IOGet(_, s) => s.send(BusMessage::Err).unwrap(),
-                _ => {}
-            }
+    fn check_message(&mut self) {
+        match self.bus_rx.recv().unwrap() {
+            BusMessage::MemPut(_, _, s) => s.send(BusMessage::Err).unwrap(),
+            BusMessage::MemGet(_, s) => s.send(BusMessage::Err).unwrap(),
+            BusMessage::IOPut(_, b, s) => {
+                self.border_color = self.convert_color(b);
+                s.send(BusMessage::IOWriteOk());
+            },
+            BusMessage::IOGet(_, s) => s.send(BusMessage::Err).unwrap(),
+            BusMessage::GetRanges(s) => {
+                s.send(BusMessage::RangesRet(vec![],vec![],vec![Range(0x0000,0xFFFF)],vec![Range(0x0000,0xFFFF)])).unwrap();
+            },
+            _ => {}
         }
     }
 }
