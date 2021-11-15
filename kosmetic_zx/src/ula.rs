@@ -1,53 +1,53 @@
-use std::fmt::{Debug, Formatter};
-use std::sync::{Arc, mpsc, Mutex, RwLock};
+use std::sync::{Arc, mpsc, Mutex};
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
-use std::thread::JoinHandle;
-use std::time::{Duration, Instant};
+use std::time::{Instant};
 use sdl2::pixels::Color;
 use sdl2::rect::Point;
-use crate::bus::{Bus, BusMessage, Range};
-use crate::clock::{Clock, ClockMessage};
-use crate::common::{Rect, Vec2, Byte, Address};
+use crate::bus::{BusMessage, Range};
+use crate::clock::{ClockMessage};
+use crate::common::{Rect, Vec2, Byte};
 use crate::video::VideoLayer;
 
-static FREQ: u64 = 7_000_000;
-static BORDER_AREA: Rect = Rect { x: 96, y: 16, w: 352, h: 296 };
-static SCREEN_AREA: Rect = Rect { x: 144, y: 64, w: 256, h: 192 };
+#[cfg(feature = "trace-ula")]
+use tracing::*;
+
+static BORDER_AREA: Rect = Rect { x: 96, y: 16, w: 352, h: 315 };
+static SCREEN_AREA: Rect = Rect { x: BORDER_AREA.x + 48, y: BORDER_AREA.y + 48, w: 256, h: 192 };
 
 pub struct Ula {
-    bus_control_rx: Receiver<BusMessage>,
     bus_control_tx: Sender<BusMessage>,
     bus_rx: Receiver<BusMessage>,
     video_layer: Option<Arc<Mutex<VideoLayer>>>,
     last_refresh: Instant,
-    border_color: sdl2::pixels::Color,
+    border_color: Color,
     render_pos: Vec2,
-    clock_rx: Receiver<ClockMessage>
+    clock_rx: Receiver<ClockMessage>,
+    clock_tx: Sender<ClockMessage>
 }
 
 impl Ula {
-    pub fn new(video_layer: Option<()>) -> (Sender<ClockMessage>, Sender<BusMessage>) {
-        let (clock_tx, clock_rx) = mpsc::channel();
-        let (bus_control_tx, bus_control_rx) = mpsc::channel();
+    pub fn new(video_layer: Option<()>, bus_sender: Sender<BusMessage>) -> (Sender<ClockMessage>, Sender<BusMessage>, Receiver<ClockMessage>) {
+        let (clock_held_tx, clock_rx) = mpsc::channel();
         let (bus_tx, bus_rx) = mpsc::channel();
+        let (clock_tx, clock_held_rx) = mpsc::channel();
 
         thread::spawn( move || {
             let mut ula = Ula {
-                bus_control_rx,
-                bus_control_tx,
+                bus_control_tx: bus_sender.clone(),
                 bus_rx,
                 video_layer: if video_layer.is_some() { Some(VideoLayer::new()) } else { None },
                 last_refresh: Instant::now(),
                 border_color: Color::RGB(0, 0, 0),
                 render_pos: Vec2::new(0, 0),
-                clock_rx
+                clock_rx,
+                clock_tx
             };
 
             ula.loop_thing()
         });
 
-        (clock_tx, bus_tx)
+        (clock_held_tx, bus_tx, clock_held_rx)
     }
 
     pub fn loop_thing(&mut self) {
@@ -65,14 +65,16 @@ impl Ula {
     }
 
     pub fn event_loop(&mut self) {
-        //let start = Instant::now();
-
+        #[cfg(feature = "trace-ula")]
+            let _ = span!(Level::TRACE, "Run ULA Event loop").enter();
         if self.video_layer.is_some() {
-            if self.render_pos.inside(SCREEN_AREA) {
-                // Do stuff
-            } else if self.render_pos.inside(BORDER_AREA) {
-                self.video_layer.as_ref().unwrap().lock().expect("Couldn't unlock write lock for canvas").canvas.lock().unwrap().set_draw_color(self.border_color);
-                self.video_layer.as_ref().unwrap().lock().expect("Couldn't unlock write lock for canvas").canvas.lock().unwrap().draw_point(Point::new(self.render_pos.x as i32, self.render_pos.y as i32));
+            if self.inside(SCREEN_AREA.x, SCREEN_AREA.y, SCREEN_AREA.w, SCREEN_AREA.h, self.render_pos.x, self.render_pos.y, 1, 1) {
+
+            } else if self.inside(BORDER_AREA.x, BORDER_AREA.y, BORDER_AREA.w, BORDER_AREA.h, self.render_pos.x, self.render_pos.y, 1, 1) {
+                self.video_layer.as_ref().unwrap().lock().expect("Couldn't unlock write lock for canvas").canvas.lock().unwrap()
+                    .set_draw_color(self.border_color);
+                self.video_layer.as_ref().unwrap().lock().expect("Couldn't unlock write lock for canvas").canvas.lock().unwrap()
+                    .draw_point(Point::new((self.render_pos.x - BORDER_AREA.x) as i32, (self.render_pos.y - BORDER_AREA.y) as i32)).unwrap();
             }
 
             self.render_pos.x += 1;
@@ -87,15 +89,21 @@ impl Ula {
             }
 
             if self.render_pos == Vec2::new(0, 0) {
-                self.video_layer.as_ref().unwrap().lock().expect("Couldn't unlock write lock for canvas").canvas.lock().unwrap().present();
-                self.video_layer.as_ref().unwrap().lock().expect("Couldn't unlock write lock for canvas").canvas.lock().unwrap().set_draw_color(self.convert_color(0));
-                self.video_layer.as_ref().unwrap().lock().expect("Couldn't unlock write lock for canvas").canvas.lock().unwrap().clear();
+                self.video_layer.as_ref().unwrap().lock().expect("Couldn't unlock write lock for canvas").canvas.lock().unwrap()
+                    .present();
+                self.video_layer.as_ref().unwrap().lock().expect("Couldn't unlock write lock for canvas").canvas.lock().unwrap()
+                    .set_draw_color(self.convert_color(0));
+                self.video_layer.as_ref().unwrap().lock().expect("Couldn't unlock write lock for canvas").canvas.lock().unwrap()
+                    .clear();
+            }
+
+            for event in self.video_layer.as_ref().unwrap().lock().expect("Couldn't unlock write lock for canvas").event_pump.lock().unwrap().poll_iter() {
+                match event {
+                    sdl2::event::Event::Quit {..} => self.clock_tx.send(ClockMessage::Stop).unwrap(),
+                    _ => {}
+                }
             }
         }
-
-        //let end = Instant::now();
-        //thread::sleep(Duration::from_nanos(1_000_000_000 / FREQ) - (end - start));
-
     }
 
     fn convert_color(&self, data: Byte) -> Color {
@@ -112,26 +120,31 @@ impl Ula {
         }
     }
 
-    fn check_message(&mut self) {
-        match self.bus_rx.recv().unwrap() {
-            BusMessage::MemPut(_, _, s) => s.send(BusMessage::Err).unwrap(),
-            BusMessage::MemGet(_, s) => s.send(BusMessage::Err).unwrap(),
-            BusMessage::IOPut(_, b, s) => {
-                self.border_color = self.convert_color(b);
-                s.send(BusMessage::IOWriteOk());
-            },
-            BusMessage::IOGet(_, s) => s.send(BusMessage::Err).unwrap(),
-            BusMessage::GetRanges(s) => {
-                s.send(BusMessage::RangesRet(vec![],vec![],vec![Range(0x0000,0xFFFF)],vec![Range(0x0000,0xFFFF)])).unwrap();
-            },
-            _ => {}
-        }
+    fn inside(&self, x1: u16, y1: u16, w1: u16, h1: u16,
+              x2: u16, y2: u16, w2: u16, h2: u16) -> bool {
+        x2 > x1 && y2 > y1 && x2 + w2 < x1 + w1 && y2 + h2 < y1 + h1
     }
-}
 
-impl Debug for Ula {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "");
-        Ok(())
+    fn check_message(&mut self) {
+        let msg = self.bus_rx.try_recv();
+        if msg.is_ok() {
+            match msg.unwrap() {
+                BusMessage::MemPut(_, _, s) => s.send(BusMessage::Err).unwrap(),
+                BusMessage::MemGet(_, s) => s.send(BusMessage::Err).unwrap(),
+                BusMessage::IOPut(_, b, s) => {
+                    #[cfg(feature = "trace-ula")]
+                        let _ = span!(Level::TRACE, "Write to ULA Registers").enter();
+                    self.border_color = self.convert_color(b);
+                    s.send(BusMessage::IOWriteOk).unwrap();
+                },
+                BusMessage::IOGet(_, s) => s.send(BusMessage::Err).unwrap(),
+                BusMessage::GetRanges(s) => {
+                    #[cfg(feature = "trace-ula")]
+                        let _ = span!(Level::TRACE, "Send ULA memory-mapped ranges").enter();
+                    s.send(BusMessage::RangesRet(vec![], vec![], vec![Range(0xFE, 0xFF)], vec![Range(0xFE, 0xFF)])).unwrap();
+                },
+                _ => {}
+            }
+        }
     }
 }

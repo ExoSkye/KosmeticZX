@@ -1,7 +1,7 @@
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
-use crate::common::{Address, Byte};
+use crate::common::{Byte};
 use crate::bus::{BusMessage, Range};
 
 #[cfg(feature = "trace-memory")]
@@ -32,15 +32,21 @@ impl ULARam {
         loop {
             match self.receiver.recv().unwrap() {
                 BusMessage::MemPut(a, b, s) => {
+                    #[cfg(feature = "trace-memory")]
+                        let _ = span!(Level::TRACE, "Write to ULAMem").enter();
                     self.bytes[a as usize] = b;
-                    s.send(BusMessage::MemWriteOk()).unwrap();
+                    s.send(BusMessage::MemWriteOk).unwrap();
                 },
                 BusMessage::MemGet(a, s) => {
+                    #[cfg(feature = "trace-memory")]
+                        let _ = span!(Level::TRACE, "Read from ULAMem").enter();
                     s.send(BusMessage::MemReadOk(self.bytes[a as usize])).unwrap();
                 },
                 BusMessage::IOPut(_, _, s) => s.send(BusMessage::Err).unwrap(),
                 BusMessage::IOGet(_, s) => s.send(BusMessage::Err).unwrap(),
                 BusMessage::GetRanges(s) => {
+                    #[cfg(feature = "trace-memory")]
+                        let _ = span!(Level::TRACE, "Send ULARam memory ranges").enter();
                     s.send(BusMessage::RangesRet(vec![Range(0x4000,0x7FFF)],vec![Range(0x4000,0x7FFF)],vec![],vec![])).unwrap();
                 },
                 _ => {}

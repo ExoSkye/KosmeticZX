@@ -1,8 +1,7 @@
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
-use std::thread::JoinHandle;
-use crate::common::{Address, Byte};
+use crate::common::{Byte};
 use crate::bus::{BusMessage, Range};
 
 #[cfg(feature = "trace-memory")]
@@ -32,15 +31,21 @@ impl CPURam {
         loop {
             match self.receiver.recv().unwrap() {
                 BusMessage::MemPut(a, b, s) => {
+                    #[cfg(feature = "trace-memory")]
+                        let _ = span!(Level::TRACE, "Write to CPUMem").enter();
                     self.bytes[a as usize] = b;
-                    s.send(BusMessage::MemWriteOk()).unwrap();
+                    s.send(BusMessage::MemWriteOk).unwrap();
                 },
                 BusMessage::MemGet(a, s) => {
+                    #[cfg(feature = "trace-memory")]
+                        let _ = span!(Level::TRACE, "Read from CPUMem").enter();
                     s.send(BusMessage::MemReadOk(self.bytes[a as usize])).unwrap();
                 },
                 BusMessage::IOPut(_, _, s) => s.send(BusMessage::Err).unwrap(),
                 BusMessage::IOGet(_, s) => s.send(BusMessage::Err).unwrap(),
                 BusMessage::GetRanges(s) => {
+                    #[cfg(feature = "trace-memory")]
+                        let _ = span!(Level::TRACE, "Send CPUMem memory ranges").enter();
                     s.send(BusMessage::RangesRet(vec![Range(0x8000,0xFFFF)],vec![Range(0x8000,0xFFFF)],vec![],vec![])).unwrap();
                 },
                 _ => {}

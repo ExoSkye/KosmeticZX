@@ -19,28 +19,6 @@ pub struct Rect {
     pub h: u16
 }
 
-impl Rect {
-    pub fn inside(&self, other: Rect) -> bool {
-        return if other.x > self.x &&
-            other.y > self.y &&
-            (other.x + other.w) < (self.x + self.w) &&
-            (other.y + other.h) < (self.y + self.h) {
-            true
-        } else {
-            false
-        }
-    }
-    pub fn vec_inside(&self, other: Vec2) -> bool {
-        return self.inside(Rect::new(other.x, other.y, other.x, other.y))
-    }
-}
-
-impl Vec2 {
-    pub fn inside(self, rect: Rect) -> bool {
-        return rect.vec_inside(self);
-    }
-}
-
 impl Into<Point> for Vec2 {
     fn into(self) -> Point {
         Point::new(self.x as i32, self.y as i32)

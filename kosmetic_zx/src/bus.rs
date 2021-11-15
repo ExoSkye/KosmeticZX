@@ -1,28 +1,26 @@
 #[cfg(feature = "hash-mem-map")]
-use std::collections::HashMap;
-#[cfg(feature = "hash-mem-map")]
-use HashMap as memMap;
+use {
+    std::collections::HashMap,
+    HashMap as memMap,
+};
 
 #[cfg(feature = "btree-mem-map")]
-use std::collections::BTreeMap;
-#[cfg(feature = "btree-mem-map")]
-use BTreeMap as memMap;
+use {
+    std::collections::BTreeMap,
+    BTreeMap as memMap,
+};
 
 #[cfg(feature = "index-mem-map")]
-use indexmap::IndexMap;
-#[cfg(feature = "index-mem-map")]
-use IndexMap as memMap;
+use {
+    indexmap::IndexMap,
+    IndexMap as memMap,
+};
 
-#[cfg(feature = "dash-mem-map")]
-use dashmap::DashMap;
-#[cfg(feature = "dash-mem-map")]
-use DashMap as memMap;
-
-use crate::bus::RWEnum::{Read, Write};
 use crate::common::{Address, Byte};
 use std::fmt::Debug;
 use std::sync::{Arc, mpsc, RwLock};
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::{Receiver, RecvError, Sender};
+use std::thread;
 
 #[cfg(feature = "trace-bus")]
 use tracing::*;
@@ -35,15 +33,17 @@ pub enum RWEnum {
 
 #[derive(Debug)]
 pub enum BusMessage {
+    AddDevice(Sender<BusMessage>, Sender<BusMessage>),
+    AddDeviceOk,
     GetRanges(Sender<BusMessage>),
     RangesRet(Vec<Range>, Vec<Range>, Vec<Range>, Vec<Range>),
     IOGet(Address, Sender<BusMessage>),
     MemGet(Address, Sender<BusMessage>),
     IOPut(Address, Byte, Sender<BusMessage>),
     MemPut(Address, Byte, Sender<BusMessage>),
-    IOWriteOk(),
+    IOWriteOk,
     IOReadOk(Byte),
-    MemWriteOk(),
+    MemWriteOk,
     MemReadOk(Byte),
     Err
 }
@@ -62,18 +62,62 @@ pub struct Bus {
     pub(crate) read_ranges: memMap<Address, MapEntry>,
     pub(crate) write_ranges: memMap<Address, MapEntry>,
     pub(crate) io_read_ranges: memMap<Address, MapEntry>,
-    pub(crate) io_write_ranges: memMap<Address, MapEntry>
+    pub(crate) io_write_ranges: memMap<Address, MapEntry>,
+    pub receiver: Receiver<BusMessage>
 }
 
 impl Bus {
     #[cfg_attr(feature = "trace-bus", instrument(name = "Create Bus", skip_all))]
-    pub fn new() -> Arc<RwLock<Bus>> {
-        Arc::new(RwLock::new(Bus {
-            read_ranges: memMap::new(),
-            write_ranges: memMap::new(),
-            io_read_ranges: memMap::new(),
-            io_write_ranges: memMap::new(),
-        }))
+    pub fn new() -> Sender<BusMessage> {
+        let (tx, rx) = mpsc::channel();
+
+        thread::spawn(move || {
+            let mut bus = Bus {
+                read_ranges: memMap::new(),
+                write_ranges: memMap::new(),
+                io_read_ranges: memMap::new(),
+                io_write_ranges: memMap::new(),
+                receiver: rx
+            };
+
+            loop {
+                match bus.receiver.recv().unwrap() {
+                    BusMessage::IOGet(a, s) => {
+                        match bus.read(a,true) {
+                            Ok(b) => {s.send(BusMessage::IOReadOk(b)).unwrap()}
+                            Err(_) => {s.send(BusMessage::Err).unwrap()}
+                        }
+                    }
+                    BusMessage::MemGet(a, s) => {
+                        match bus.read(a,false) {
+                            Ok(b) => {s.send(BusMessage::MemReadOk(b)).unwrap()}
+                            Err(_) => {s.send(BusMessage::Err).unwrap()}
+                        }
+                    }
+                    BusMessage::IOPut(a, b, s) => {
+                        match bus.write(a, b, true) {
+                            Ok(_) => {s.send(BusMessage::IOWriteOk).unwrap()}
+                            Err(_) => {s.send(BusMessage::Err).unwrap()}
+                        }
+
+                    }
+                    BusMessage::MemPut(a, b, s) => {
+                        match bus.write(a, b, false) {
+                            Ok(_) => {s.send(BusMessage::MemWriteOk).unwrap()}
+                            Err(_) => {s.send(BusMessage::Err).unwrap()}
+                        }
+                    }
+                    BusMessage::AddDevice(d,s) => {
+                        bus.add_device(d);
+                        s.send(BusMessage::AddDeviceOk).unwrap();
+                    }
+                    BusMessage::Err => {}
+                    _ => {}
+                }
+            }
+        });
+
+        tx.clone()
     }
 
     #[cfg_attr(
@@ -85,7 +129,7 @@ impl Bus {
         device.send(BusMessage::GetRanges(tx)).unwrap();
         let ranges = match rx.recv().unwrap() {
             BusMessage::RangesRet(a, b, c, d) => ( a, b, c, d ),
-            _ => panic!("EEEEEEEEEEEEEEEEEEEEEE")
+            _ => panic!("Got unexpected message")
         };
 
         for range in ranges.0 {
@@ -129,7 +173,6 @@ impl Bus {
         }
     }
 
-    #[cfg(not(feature = "dash-mem-map"))]
     #[cfg_attr(feature = "trace-bus", instrument(name = "Write to bus", skip_all))]
     pub fn write(&mut self, address: Address, data: Byte, io_bus: bool) -> Result<(), ()> {
         for (key, val) in if io_bus == true {
@@ -144,11 +187,11 @@ impl Bus {
                         BusMessage::IOPut(address - key, data, tx)
                     } else {
                         BusMessage::MemPut(address - key, data, tx)
-                    });
+                    }).unwrap();
                     let ret = rx.recv().unwrap();
                     return match ret {
-                        BusMessage::IOWriteOk() => Ok(()),
-                        BusMessage::MemWriteOk() => Ok(()),
+                        BusMessage::IOWriteOk => Ok(()),
+                        BusMessage::MemWriteOk => Ok(()),
                         _ => Err(())
                     }
                 }
@@ -157,7 +200,6 @@ impl Bus {
         Err(())
     }
 
-    #[cfg(not(feature = "dash-mem-map"))]
     #[cfg_attr(feature = "trace-bus", instrument(name = "Read from bus", skip_all))]
     pub fn read(&self, address: Address, io_bus: bool) -> Result<Byte, ()> {
         for (key, val) in if io_bus == true {
@@ -172,7 +214,7 @@ impl Bus {
                         BusMessage::IOGet(address - key, tx)
                     } else {
                         BusMessage::MemGet(address - key, tx)
-                    });
+                    }).unwrap();
 
                     let ret = rx.recv().unwrap();
 

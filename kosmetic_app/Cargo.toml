@@ -6,10 +6,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-kosmetic_zx = { path = "../kosmetic_zx", default-features = false }
+kosmetic_zx = { path = "../kosmetic_zx", default-features = true }
 tracing-tracy = { version = "0.7.0", optional = true }
 tracing-subscriber = { version = "0.2", optional = true }
 tracing = { version = "0.1", optional = true }
 
 [features]
-trace = ["kosmetic_zx/trace-all", "tracing-tracy", "tracing-subscriber", "tracing"]
+default = []
+trace = ["kosmetic_zx/trace-all-slow", "tracing-tracy", "tracing-subscriber", "tracing"]

@@ -1,7 +1,7 @@
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
-use crate::common::{Address, Byte};
+use crate::common::{Byte};
 use crate::bus::{BusMessage, Range};
 
 #[cfg(feature = "trace-memory")]
@@ -34,11 +34,15 @@ impl Rom {
             match self.receiver.recv().unwrap() {
                 BusMessage::MemPut(_, _, s) => s.send(BusMessage::Err).unwrap(),
                 BusMessage::MemGet(a, s) => {
+                    #[cfg(feature = "trace-memory")]
+                        let _ = span!(Level::TRACE, "Read from Rom").enter();
                     s.send(BusMessage::MemReadOk(self.contents[a as usize])).unwrap();
                 },
                 BusMessage::IOPut(_, _, s) => s.send(BusMessage::Err).unwrap(),
                 BusMessage::IOGet(_, s) => s.send(BusMessage::Err).unwrap(),
                 BusMessage::GetRanges(s) => {
+                    #[cfg(feature = "trace-memory")]
+                        let _ = span!(Level::TRACE, "Send ROM memory ranges").enter();
                     s.send(BusMessage::RangesRet(vec![Range(0x0000,0x3FFF)],vec![Range(0x0000,0x3FFF)],vec![],vec![])).unwrap();
                 },
                 _ => {}
