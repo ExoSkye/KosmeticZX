@@ -50,9 +50,6 @@ jobs:
     - name: Build Debug
       if: matrix.type == 'debug'
       run: cargo build --verbose
-
-    - name: Test
-      run: cargo test --verbose
       
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v2.2.4
