@@ -45,11 +45,11 @@ jobs:
       
     - name: Build Release
       if: matrix.type == 'release'
-      run: cargo build --verbose --release --features trace
+      run: cargo build --verbose --release --features bundled-sdl2
       
     - name: Build Debug
       if: matrix.type == 'debug'
-      run: cargo build --verbose
+      run: cargo build --verbose --features bundled-sdl2
       
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v2.2.4
