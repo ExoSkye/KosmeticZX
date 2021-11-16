@@ -41,8 +41,6 @@ impl Clock {
                 #[cfg(feature = "trace-clock")]
                     let _ = span!(Level::TRACE, "Clock").enter();
 
-                let start = Instant::now();
-
                 //if i % CPU_DIVISOR == 0 {
                 //    self.cpu_clock.send(ClockMessage::Tick).unwrap();
                 //}
@@ -60,19 +58,6 @@ impl Clock {
                         break;
                     }
                 }
-
-                let end = Instant::now();
-
-                let diff = end.duration_since(start);
-
-                if diff.as_nanos() < 142 {
-                    //println!("Clock running ahead by: {} nanos", (sleep_dur - diff).as_nanos());
-                    std::thread::sleep(sleep_dur - diff);
-                }
-                else {
-                    //println!("Clock running behind by: {} nanos", (diff - sleep_dur).as_nanos())
-                }
-
             }
         })
     }

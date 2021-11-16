@@ -1,5 +1,5 @@
 [workspace]
 members=["kosmetic_zx", "kosmetic_app"]
 
-[profile.release]
-lto = true
+#[profile.release]
+#lto = true
