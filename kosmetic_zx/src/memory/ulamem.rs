@@ -1,5 +1,5 @@
 use std::sync::mpsc;
-use std::sync::mpsc::{Receiver, Sender};
+use crossbeam_channel::{Receiver, Sender, bounded};
 use std::thread;
 use crate::common::{Byte};
 use crate::bus::{BusMessage, Range};
@@ -15,7 +15,7 @@ pub struct ULARam {
 
 impl ULARam {
     pub fn new() -> Sender<BusMessage> {
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = bounded(128);
         thread::spawn( move || {
             let mut ula = ULARam {
                 bytes: [0; 0x4000],

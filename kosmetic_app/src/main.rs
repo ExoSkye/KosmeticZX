@@ -1,10 +1,9 @@
-use std::sync::mpsc;
+use crossbeam_channel::*;
 use std::time::Duration;
 
 use kosmetic_zx::memory::*;
 use kosmetic_zx::bus::*;
 use kosmetic_zx::cpu::*;
-use kosmetic_zx::common::*;
 use kosmetic_zx::clock::Clock;
 use kosmetic_zx::ula::Ula;
 
@@ -31,32 +30,32 @@ fn check_add_device(msg: BusMessage) {
 fn main() {
     init_logging();
 
-    let mut bus = Bus::new();
+    let bus = Bus::new();
 
     let cpuram = cpumem::CPURam::new();
     let ularam = ulamem::ULARam::new();
     let rom = rom::Rom::new([0;0x4000]);
 
     let ula_clock = Ula::new(Some(()), bus.clone());
-    let (cpu_clock, _) = mpsc::channel();
+    let (cpu_clock, _) = bounded(128);
 
-    let bus_channel = mpsc::channel();
+    let bus_channel = bounded(128);
 
-    bus.send(BusMessage::AddDevice(cpuram, bus_channel.0.clone()));
+    bus.send(BusMessage::AddDevice(cpuram, bus_channel.0.clone())).unwrap();
     check_add_device(bus_channel.1.recv().unwrap());
-    bus.send(BusMessage::AddDevice(ularam, bus_channel.0.clone()));
+    bus.send(BusMessage::AddDevice(ularam, bus_channel.0.clone())).unwrap();
     check_add_device(bus_channel.1.recv().unwrap());
-    bus.send(BusMessage::AddDevice(rom, bus_channel.0.clone()));
+    bus.send(BusMessage::AddDevice(rom, bus_channel.0.clone())).unwrap();
     check_add_device(bus_channel.1.recv().unwrap());
-    bus.send(BusMessage::AddDevice(ula_clock.1, bus_channel.0.clone()));
+    bus.send(BusMessage::AddDevice(ula_clock.1, bus_channel.0.clone())).unwrap();
     check_add_device(bus_channel.1.recv().unwrap());
 
-    let clock = Clock::new(cpu_clock.clone(),ula_clock.0.clone(), ula_clock.2);
+    let _clock = Clock::new(cpu_clock.clone(),ula_clock.0.clone(), ula_clock.2);
 
     let mut i = 1;
 
     loop {
-        bus.send(BusMessage::IOPut(0xFE, i, bus_channel.0.clone()));
+        bus.send(BusMessage::IOPut(0xFE, i, bus_channel.0.clone())).unwrap();
         let bus_ret = bus_channel.1.try_recv();
 
         if bus_ret.is_ok() {

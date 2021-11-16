@@ -1,5 +1,4 @@
 use std::sync::{Arc, mpsc, Mutex};
-use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
 use std::time::{Instant};
 use sdl2::pixels::Color;
@@ -8,6 +7,7 @@ use crate::bus::{BusMessage, Range};
 use crate::clock::{ClockMessage};
 use crate::common::{Rect, Vec2, Byte};
 use crate::video::VideoLayer;
+use crossbeam_channel::{bounded, Receiver, Sender};
 
 #[cfg(feature = "trace-ula")]
 use tracing::*;
@@ -19,7 +19,6 @@ pub struct Ula {
     bus_control_tx: Sender<BusMessage>,
     bus_rx: Receiver<BusMessage>,
     video_layer: Option<Arc<Mutex<VideoLayer>>>,
-    last_refresh: Instant,
     border_color: Color,
     render_pos: Vec2,
     clock_rx: Receiver<ClockMessage>,
@@ -28,16 +27,15 @@ pub struct Ula {
 
 impl Ula {
     pub fn new(video_layer: Option<()>, bus_sender: Sender<BusMessage>) -> (Sender<ClockMessage>, Sender<BusMessage>, Receiver<ClockMessage>) {
-        let (clock_held_tx, clock_rx) = mpsc::channel();
-        let (bus_tx, bus_rx) = mpsc::channel();
-        let (clock_tx, clock_held_rx) = mpsc::channel();
+        let (clock_held_tx, clock_rx) = bounded(128);
+        let (bus_tx, bus_rx) = bounded(128);
+        let (clock_tx, clock_held_rx) = bounded(128);
 
         thread::spawn( move || {
             let mut ula = Ula {
                 bus_control_tx: bus_sender.clone(),
                 bus_rx,
                 video_layer: if video_layer.is_some() { Some(VideoLayer::new()) } else { None },
-                last_refresh: Instant::now(),
                 border_color: Color::RGB(0, 0, 0),
                 render_pos: Vec2::new(0, 0),
                 clock_rx,

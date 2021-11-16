@@ -19,7 +19,7 @@ use {
 use crate::common::{Address, Byte};
 use std::fmt::Debug;
 use std::sync::{Arc, mpsc, RwLock};
-use std::sync::mpsc::{Receiver, RecvError, Sender};
+use crossbeam_channel::{Receiver, Sender, bounded};
 use std::thread;
 
 #[cfg(feature = "trace-bus")]
@@ -69,7 +69,7 @@ pub struct Bus {
 impl Bus {
     #[cfg_attr(feature = "trace-bus", instrument(name = "Create Bus", skip_all))]
     pub fn new() -> Sender<BusMessage> {
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = bounded(128);
 
         thread::spawn(move || {
             let mut bus = Bus {
@@ -125,7 +125,7 @@ impl Bus {
         instrument(name = "Add device to bus", skip_all)
     )]
     pub fn add_device(&mut self, device: Sender<BusMessage>) {
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = bounded(1);
         device.send(BusMessage::GetRanges(tx)).unwrap();
         let ranges = match rx.recv().unwrap() {
             BusMessage::RangesRet(a, b, c, d) => ( a, b, c, d ),
@@ -182,7 +182,7 @@ impl Bus {
         } {
             if address >= *key {
                 if address < val.range.1 {
-                    let (tx,rx) = mpsc::channel();
+                    let (tx,rx) = bounded(1);
                     val.device.send(if io_bus {
                         BusMessage::IOPut(address - key, data, tx)
                     } else {
@@ -209,7 +209,7 @@ impl Bus {
         } {
             if address >= *key {
                 if address < val.range.1 {
-                    let (tx,rx) = mpsc::channel();
+                    let (tx,rx) = bounded(1);
                     val.device.send(if io_bus {
                         BusMessage::IOGet(address - key, tx)
                     } else {
