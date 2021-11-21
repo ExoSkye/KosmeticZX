@@ -129,14 +129,14 @@ impl Ula {
         if msg.is_ok() {
             match msg.unwrap() {
                 BusMessage::MemPut(_, _, s) => s.send(BusMessage::Err).unwrap(),
-                BusMessage::MemGet(_, s) => s.send(BusMessage::Err).unwrap(),
+                BusMessage::MemGet(_, _, s) => s.send(BusMessage::Err).unwrap(),
                 BusMessage::IOPut(_, b, s) => {
                     #[cfg(feature = "trace-ula")]
                         let _ = span!(Level::TRACE, "Write to ULA Registers").enter();
                     self.border_color = self.convert_color(b);
                     s.send(BusMessage::IOWriteOk).unwrap();
                 },
-                BusMessage::IOGet(_, s) => s.send(BusMessage::Err).unwrap(),
+                BusMessage::IOGet(_, _, s) => s.send(BusMessage::Err).unwrap(),
                 BusMessage::GetRanges(s) => {
                     #[cfg(feature = "trace-ula")]
                         let _ = span!(Level::TRACE, "Send ULA memory-mapped ranges").enter();

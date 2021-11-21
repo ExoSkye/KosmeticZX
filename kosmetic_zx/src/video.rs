@@ -1,11 +1,11 @@
 use std::sync::{Mutex, Arc};
 
-#[cfg(feature = "video")]
+#[cfg(not(feature = "no-video"))]
     use sdl2::{AudioSubsystem, EventPump, Sdl, VideoSubsystem};
     use sdl2::render::Canvas;
     use sdl2::video::Window;
 
-#[cfg(feature = "video")]
+#[cfg(not(feature = "no-video"))]
     pub struct VideoLayer {
         pub ctx: Arc<Mutex<Sdl>>,
         pub vid_sub_sys: Arc<Mutex<VideoSubsystem>>,
@@ -14,7 +14,7 @@ use std::sync::{Mutex, Arc};
         pub event_pump: Arc<Mutex<EventPump>>
     }
 
-#[cfg(feature = "video")]
+#[cfg(not(feature = "no-video"))]
     impl VideoLayer {
         pub fn new() -> Arc<Mutex<VideoLayer>> {
             let ctx = sdl2::init().expect("Couldn't init SDL");
@@ -35,10 +35,10 @@ use std::sync::{Mutex, Arc};
         }
     }
 
-#[cfg(not(feature = "video"))]
+#[cfg(feature = "no-video")]
     pub struct VideoLayer {}
     
-#[cfg(not(feature = "video"))]
+#[cfg(feature = "no-video")]
     impl VideoLayer {
         pub fn new() -> Arc<Mutex<VideoLayer>> {
             Arc::new(Mutex::new(VideoLayer {}))

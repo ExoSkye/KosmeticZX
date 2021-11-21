@@ -36,13 +36,13 @@ impl CPURam {
                     self.bytes[a as usize] = b;
                     s.send(BusMessage::MemWriteOk).unwrap();
                 },
-                BusMessage::MemGet(a, s) => {
+                BusMessage::MemGet(a, _, s) => {
                     #[cfg(feature = "trace-memory")]
                         let _ = span!(Level::TRACE, "Read from CPUMem").enter();
-                    s.send(BusMessage::MemReadOk(self.bytes[a as usize])).unwrap();
+                    s.send(BusMessage::MemReadOk(vec![self.bytes[a as usize]])).unwrap();
                 },
                 BusMessage::IOPut(_, _, s) => s.send(BusMessage::Err).unwrap(),
-                BusMessage::IOGet(_, s) => s.send(BusMessage::Err).unwrap(),
+                BusMessage::IOGet(_, _, s) => s.send(BusMessage::Err).unwrap(),
                 BusMessage::GetRanges(s) => {
                     #[cfg(feature = "trace-memory")]
                         let _ = span!(Level::TRACE, "Send CPUMem memory ranges").enter();

@@ -43,9 +43,9 @@ impl Clock {
 
                 //let start = Instant::now();
 
-                //if i % CPU_DIVISOR == 0 {
-                //    self.cpu_clock.send(ClockMessage::Tick).unwrap();
-                //}
+                if i % CPU_DIVISOR == 0 {
+                    clk.cpu_clock.send(ClockMessage::Tick).unwrap();
+                }
 
                 clk.ula_clock.send(ClockMessage::Tick).unwrap();
 

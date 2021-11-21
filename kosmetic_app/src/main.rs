@@ -37,7 +37,7 @@ fn main() {
     let rom = rom::Rom::new([0;0x4000]);
 
     let ula_clock = Ula::new(Some(()), bus.clone());
-    let (cpu_clock, _) = bounded(128);
+    let cpu_clock = Cpu::new(bus.clone());
 
     let bus_channel = bounded(128);
 
@@ -50,7 +50,7 @@ fn main() {
     bus.send(BusMessage::AddDevice(ula_clock.1, bus_channel.0.clone())).unwrap();
     check_add_device(bus_channel.1.recv().unwrap());
 
-    let _clock = Clock::new(cpu_clock.clone(),ula_clock.0.clone(), ula_clock.2);
+    let _clock = Clock::new(cpu_clock.0.clone(), ula_clock.0.clone(), ula_clock.2);
 
     let mut i = 1;
 

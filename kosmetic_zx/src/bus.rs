@@ -37,14 +37,16 @@ pub enum BusMessage {
     AddDeviceOk,
     GetRanges(Sender<BusMessage>),
     RangesRet(Vec<Range>, Vec<Range>, Vec<Range>, Vec<Range>),
-    IOGet(Address, Sender<BusMessage>),
-    MemGet(Address, Sender<BusMessage>),
+    IOGet(Address, Address, Sender<BusMessage>),
+    MemGet(Address, Address, Sender<BusMessage>),
     IOPut(Address, Byte, Sender<BusMessage>),
     MemPut(Address, Byte, Sender<BusMessage>),
+    IOPutMulti(Address, Vec<Byte>, Sender<BusMessage>),
+    MemPutMulti(Address, Vec<Byte>, Sender<BusMessage>),
     IOWriteOk,
-    IOReadOk(Byte),
+    IOReadOk(Vec<Byte>),
     MemWriteOk,
-    MemReadOk(Byte),
+    MemReadOk(Vec<Byte>),
     Err
 }
 
@@ -82,31 +84,43 @@ impl Bus {
 
             loop {
                 match bus.receiver.recv().unwrap() {
-                    BusMessage::IOGet(a, s) => {
-                        match bus.read(a,true) {
+                    BusMessage::IOGet(a, l, s) => {
+                        match bus.read(a, l, true) {
                             Ok(b) => {s.send(BusMessage::IOReadOk(b)).unwrap()}
                             Err(_) => {s.send(BusMessage::Err).unwrap()}
                         }
                     }
-                    BusMessage::MemGet(a, s) => {
-                        match bus.read(a,false) {
+                    BusMessage::MemGet(a, l, s) => {
+                        match bus.read(a, l, false) {
                             Ok(b) => {s.send(BusMessage::MemReadOk(b)).unwrap()}
                             Err(_) => {s.send(BusMessage::Err).unwrap()}
                         }
                     }
                     BusMessage::IOPut(a, b, s) => {
-                        match bus.write(a, b, true) {
+                        match bus.write(a, vec![b], true) {
                             Ok(_) => {s.send(BusMessage::IOWriteOk).unwrap()}
                             Err(_) => {s.send(BusMessage::Err).unwrap()}
                         }
 
                     }
                     BusMessage::MemPut(a, b, s) => {
-                        match bus.write(a, b, false) {
+                        match bus.write(a, vec![b], false) {
                             Ok(_) => {s.send(BusMessage::MemWriteOk).unwrap()}
                             Err(_) => {s.send(BusMessage::Err).unwrap()}
                         }
                     }
+                    BusMessage::MemPutMulti(a, b, s) => {
+                        match bus.write(a, b, false) {
+                            Ok(_) => {s.send(BusMessage::MemWriteOk).unwrap()}
+                            Err(_) => {s.send(BusMessage::Err).unwrap()}
+                        }
+                    },
+                    BusMessage::IOPutMulti(a, b, s) => {
+                        match bus.write(a, b, true) {
+                            Ok(_) => {s.send(BusMessage::MemWriteOk).unwrap()}
+                            Err(_) => {s.send(BusMessage::Err).unwrap()}
+                        }
+                    },
                     BusMessage::AddDevice(d,s) => {
                         bus.add_device(d);
                         s.send(BusMessage::AddDeviceOk).unwrap();
@@ -174,7 +188,7 @@ impl Bus {
     }
 
     #[cfg_attr(feature = "trace-bus", instrument(name = "Write to bus", skip_all))]
-    pub fn write(&mut self, address: Address, data: Byte, io_bus: bool) -> Result<(), ()> {
+    pub fn write(&mut self, address: Address, data: Vec<Byte>, io_bus: bool) -> Result<(), ()> {
         for (key, val) in if io_bus == true {
             self.io_write_ranges.iter_mut()
         } else {
@@ -183,16 +197,18 @@ impl Bus {
             if address >= *key {
                 if address < val.range.1 {
                     let (tx,rx) = bounded(1);
-                    val.device.send(if io_bus {
-                        BusMessage::IOPut(address - key, data, tx)
-                    } else {
-                        BusMessage::MemPut(address - key, data, tx)
-                    }).unwrap();
-                    let ret = rx.recv().unwrap();
-                    return match ret {
-                        BusMessage::IOWriteOk => Ok(()),
-                        BusMessage::MemWriteOk => Ok(()),
-                        _ => Err(())
+                    for b in &data {
+                        val.device.send(if io_bus {
+                            BusMessage::IOPut(address - key, *b, tx)
+                        } else {
+                            BusMessage::MemPut(address - key, *b, tx)
+                        }).unwrap();
+                        let ret = rx.recv().unwrap();
+                        return match ret {
+                            BusMessage::IOWriteOk => Ok(()),
+                            BusMessage::MemWriteOk => Ok(()),
+                            _ => Err(())
+                        }
                     }
                 }
             }
@@ -201,7 +217,7 @@ impl Bus {
     }
 
     #[cfg_attr(feature = "trace-bus", instrument(name = "Read from bus", skip_all))]
-    pub fn read(&self, address: Address, io_bus: bool) -> Result<Byte, ()> {
+    pub fn read(&self, address: Address, length: Address, io_bus: bool) -> Result<Vec<Byte>, ()> {
         for (key, val) in if io_bus == true {
             self.io_read_ranges.iter()
         } else {
@@ -210,19 +226,25 @@ impl Bus {
             if address >= *key {
                 if address < val.range.1 {
                     let (tx,rx) = bounded(1);
-                    val.device.send(if io_bus {
-                        BusMessage::IOGet(address - key, tx)
-                    } else {
-                        BusMessage::MemGet(address - key, tx)
-                    }).unwrap();
+                    let mut retvec = vec![];
+                    for i in 0..length {
+                        val.device.send(if io_bus {
+                            BusMessage::IOGet(address - key + i, 1, tx.clone())
+                        } else {
+                            BusMessage::MemGet(address - key + i, 1, tx.clone())
+                        }).unwrap();
 
-                    let ret = rx.recv().unwrap();
+                        let ret = rx.recv().unwrap();
 
-                    return match ret {
-                        BusMessage::IOReadOk(data) => Ok(data),
-                        BusMessage::MemReadOk(data) => Ok(data),
-                        _ => Err(())
+                        match ret {
+                            BusMessage::IOReadOk(data) | BusMessage::MemReadOk(data) => retvec.push(data[0]),
+                            _ => {  }
+                        }
                     }
+                    if retvec.len() < length.into() {
+                        return Err(());
+                    }
+                    return Ok(retvec);
                 }
             }
         }
