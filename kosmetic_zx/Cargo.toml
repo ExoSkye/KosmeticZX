@@ -25,5 +25,6 @@ hash-mem-map = []
 btree-mem-map = []
 index-mem-map = ["indexmap"]
 bundled-sdl2 = ["sdl2/bundled"]
+no-video = []
 
 

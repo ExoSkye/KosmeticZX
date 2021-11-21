@@ -65,43 +65,44 @@ impl Ula {
     pub fn event_loop(&mut self) {
         #[cfg(feature = "trace-ula")]
             let _ = span!(Level::TRACE, "Run ULA Event loop").enter();
-        if self.video_layer.is_some() {
-            if self.inside(SCREEN_AREA.x, SCREEN_AREA.y, SCREEN_AREA.w, SCREEN_AREA.h, self.render_pos.x, self.render_pos.y, 1, 1) {
+        #[cfg(not(feature = "no-video"))]
+            if self.video_layer.is_some() {
+                if self.inside(SCREEN_AREA.x, SCREEN_AREA.y, SCREEN_AREA.w, SCREEN_AREA.h, self.render_pos.x, self.render_pos.y, 1, 1) {
 
-            } else if self.inside(BORDER_AREA.x, BORDER_AREA.y, BORDER_AREA.w, BORDER_AREA.h, self.render_pos.x, self.render_pos.y, 1, 1) {
-                self.video_layer.as_ref().unwrap().lock().expect("Couldn't unlock write lock for canvas").canvas.lock().unwrap()
-                    .set_draw_color(self.border_color);
-                self.video_layer.as_ref().unwrap().lock().expect("Couldn't unlock write lock for canvas").canvas.lock().unwrap()
-                    .draw_point(Point::new((self.render_pos.x - BORDER_AREA.x) as i32, (self.render_pos.y - BORDER_AREA.y) as i32)).unwrap();
-            }
+                } else if self.inside(BORDER_AREA.x, BORDER_AREA.y, BORDER_AREA.w, BORDER_AREA.h, self.render_pos.x, self.render_pos.y, 1, 1) {
+                    self.video_layer.as_ref().unwrap().lock().expect("Couldn't unlock write lock for canvas").canvas.lock().unwrap()
+                        .set_draw_color(self.border_color);
+                    self.video_layer.as_ref().unwrap().lock().expect("Couldn't unlock write lock for canvas").canvas.lock().unwrap()
+                        .draw_point(Point::new((self.render_pos.x - BORDER_AREA.x) as i32, (self.render_pos.y - BORDER_AREA.y) as i32)).unwrap();
+                }
 
-            self.render_pos.x += 1;
+                self.render_pos.x += 1;
 
-            if self.render_pos.x >= BORDER_AREA.x + BORDER_AREA.w {
-                self.render_pos.x = 0;
-                self.render_pos.y += 1;
-            }
+                if self.render_pos.x >= BORDER_AREA.x + BORDER_AREA.w {
+                    self.render_pos.x = 0;
+                    self.render_pos.y += 1;
+                }
 
-            if self.render_pos.y >= BORDER_AREA.y + BORDER_AREA.h {
-                self.render_pos.y = 0;
-            }
+                if self.render_pos.y >= BORDER_AREA.y + BORDER_AREA.h {
+                    self.render_pos.y = 0;
+                }
 
-            if self.render_pos == Vec2::new(0, 0) {
-                self.video_layer.as_ref().unwrap().lock().expect("Couldn't unlock write lock for canvas").canvas.lock().unwrap()
-                    .present();
-                self.video_layer.as_ref().unwrap().lock().expect("Couldn't unlock write lock for canvas").canvas.lock().unwrap()
-                    .set_draw_color(self.convert_color(0));
-                self.video_layer.as_ref().unwrap().lock().expect("Couldn't unlock write lock for canvas").canvas.lock().unwrap()
-                    .clear();
-            }
+                if self.render_pos == Vec2::new(0, 0) {
+                    self.video_layer.as_ref().unwrap().lock().expect("Couldn't unlock write lock for canvas").canvas.lock().unwrap()
+                        .present();
+                    self.video_layer.as_ref().unwrap().lock().expect("Couldn't unlock write lock for canvas").canvas.lock().unwrap()
+                        .set_draw_color(self.convert_color(0));
+                    self.video_layer.as_ref().unwrap().lock().expect("Couldn't unlock write lock for canvas").canvas.lock().unwrap()
+                        .clear();
+                }
 
-            for event in self.video_layer.as_ref().unwrap().lock().expect("Couldn't unlock write lock for canvas").event_pump.lock().unwrap().poll_iter() {
-                match event {
-                    sdl2::event::Event::Quit {..} => self.clock_tx.send(ClockMessage::Stop).unwrap(),
-                    _ => {}
+                for event in self.video_layer.as_ref().unwrap().lock().expect("Couldn't unlock write lock for canvas").event_pump.lock().unwrap().poll_iter() {
+                    match event {
+                        sdl2::event::Event::Quit {..} => self.clock_tx.send(ClockMessage::Stop).unwrap(),
+                        _ => {}
+                    }
                 }
             }
-        }
     }
 
     fn convert_color(&self, data: Byte) -> Color {
