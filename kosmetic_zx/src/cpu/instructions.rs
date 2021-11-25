@@ -1,13 +1,21 @@
-use crate::cpu::CPUModifiable;
+use super::Cpu;
 
-pub fn ld<Val: CPUModifiable>(mut a: Val, b: Val) {
-    a.set16(b.get16());
+pub mod instruction_defs;
+pub mod meta_instructions;
+
+use crate::common::{Byte, Address};
+
+macro_rules! def_insts {
+    ($inst_name: ident, $cpu: ident, $inst: ident, $($name: ident, $opcode: literal)+) => {
+        match $inst_name {
+            $($opcode => { instruction_defs::$name($cpu, $inst) },)*
+            _ => { unimplemented!() }
+        }
+    };
 }
 
-pub fn inc<Val: CPUModifiable>(val: &mut Val) {
-    val.set16(val.get16() + 1);
-}
+pub fn run(cpu: &mut Cpu, instruction: [Byte; 4]) -> u16 {
+    let opcode = instruction[0];
 
-pub fn dec<Val: CPUModifiable>(val: &mut Val) {
-    val.set16(val.get16() - 1);
+    return def_insts!(opcode, cpu, instruction, nop, 0x0)    
 }

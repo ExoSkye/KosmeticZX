@@ -1,6 +1,5 @@
 #![allow(non_snake_case)]
 
-pub mod instruction_map;
 pub mod instructions;
 
 use crate::common::{Address, Byte};
@@ -9,8 +8,9 @@ use crossbeam_channel::{bounded, Receiver, Sender};
 use crate::bus::{BusMessage};
 use crate::clock::{ClockMessage};
 
-use std::sync::{Arc, Mutex};
 use std::thread;
+
+use self::instructions::meta_instructions::{bytes_to_dword, dword_to_bytes};
 
 pub trait CPUModifiable : Copy {
     fn get8(self) -> Byte;
@@ -58,20 +58,10 @@ impl CPUModifiable for Address {
     }
 }
 
-pub struct ComboRegister {
-    high: Arc<Byte>,
-    low: Arc<Byte>
-}
 
-impl ComboRegister {
-    fn new(high: Arc<Byte>, low: Arc<Byte>) -> ComboRegister {
-        ComboRegister {
-            high, low
-        }
-    }
-}
 
-pub struct Cpu<'a> {
+pub struct Cpu {
+    count: u16,
     A: Byte,
     B: Byte,
     C: Byte,
@@ -93,23 +83,19 @@ pub struct Cpu<'a> {
     sF: Byte,
     sH: Byte,
     sL: Byte,
-    AF: Option<ComboRegister>,
-    BC: Option<ComboRegister>,
-    DE: Option<ComboRegister>,
-    HL: Option<ComboRegister>,
     clock_rx: Receiver<ClockMessage>,
     clock_tx: Sender<ClockMessage>,
-    bus_tx: Sender<BusMessage>,
-    inst_map: Arc<instruction_map::InstructionMap<'a>>
+    bus_tx: Sender<BusMessage>
 }
 
-impl Cpu<'static> {
+impl Cpu {
     pub fn new(bus_sender: Sender<BusMessage>) -> (Sender<ClockMessage>, Receiver<ClockMessage>)  {
         let (clock_held_tx, clock_rx) = bounded(128);
         let (clock_tx, clock_held_rx) = bounded(128);
 
         thread::spawn( move || {
             let mut cpu = Cpu {
+                count: 0,
                 A: 0,
                 B: 0,
                 C: 0,
@@ -131,20 +117,10 @@ impl Cpu<'static> {
                 sF: 0,
                 sH: 0,
                 sL: 0,
-                AF: None,
-                BC: None,
-                DE: None,
-                HL: None,
                 clock_rx,
                 clock_tx,
-                bus_tx: bus_sender,
-                inst_map: instruction_map::InstructionMap::new()
+                bus_tx: bus_sender
             };
-
-            cpu.AF = Some(ComboRegister::new(Arc::new(cpu.A), Arc::new(cpu.F)));
-            cpu.BC = Some(ComboRegister::new(Arc::new(cpu.B), Arc::new(cpu.C)));
-            cpu.DE = Some(ComboRegister::new(Arc::new(cpu.D), Arc::new(cpu.E)));
-            cpu.HL = Some(ComboRegister::new(Arc::new(cpu.H), Arc::new(cpu.L)));
 
             cpu.loop_thing()
         });
@@ -158,20 +134,68 @@ impl Cpu<'static> {
 
             if clock_msg.is_ok() {
                 if clock_msg.unwrap() == ClockMessage::Tick {
-                    self.execute();
+                    if self.count == 0 {
+                        self.count = self.execute();
+                    }
+                    else {
+                        self.count -= 1;
+                    }
                 } else { break; }
             }
         }
     }
 
-    pub fn execute(&mut self) {
+    pub fn execute(&mut self) -> u16 {
         let (tx, rx) = bounded(1);
-        self.bus_tx.send(BusMessage::MemGet(self.PC, 2, tx));
+        self.bus_tx.send(BusMessage::MemGet(self.PC, 4, tx));
         let ret = rx.recv().unwrap();
 
-        match ret {
-            BusMessage::MemReadOk(b) => self.inst_map.get((b[0] as Address) >> 8 | (b[1] as Address))(self),
+        return match ret {
+            BusMessage::MemReadOk(b) => {
+                //instructions::run(self, b.into_iter()[0..3])
+                0u16
+            }
             _ => { panic!("Couldn't read from bus"); }
         };
+    }
+
+    pub fn BC(&self) -> Address {
+        bytes_to_dword((self.B, self.C))
+    }
+
+    pub fn AF(&self) -> Address {
+        bytes_to_dword((self.A, self.F))
+    }
+
+    pub fn DE(&self) -> Address {
+        bytes_to_dword((self.D, self.E))
+    }
+
+    pub fn HL(&self) -> Address {
+        bytes_to_dword((self.H, self.L))
+    }
+
+    pub fn set_BC(&mut self, new: Address) {
+        let bytes = dword_to_bytes(new);
+        self.B = bytes.0;
+        self.C = bytes.1;
+    }
+
+    pub fn set_AF(&mut self, new: Address) {
+        let bytes = dword_to_bytes(new);
+        self.A = bytes.0;
+        self.F = bytes.1;
+    }
+
+    pub fn set_DE(&mut self, new: Address) {
+        let bytes = dword_to_bytes(new);
+        self.D = bytes.0;
+        self.E = bytes.1;
+    }
+
+    pub fn set_HL(&mut self, new: Address) {
+        let bytes = dword_to_bytes(new);
+        self.H = bytes.0;
+        self.L = bytes.1;
     }
 }
