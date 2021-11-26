@@ -17,5 +17,10 @@ macro_rules! def_insts {
 pub fn run(cpu: &mut Cpu, instruction: [Byte; 4]) -> u16 {
     let opcode = instruction[0];
 
-    return def_insts!(opcode, cpu, instruction, nop, 0x0)    
+    return def_insts!(opcode, cpu, instruction,
+        nop, 0x0,
+        ld_bc_imm, 0x1,
+        ld_bc_a, 0x2,
+        inc_bc, 0x3
+    )
 }
