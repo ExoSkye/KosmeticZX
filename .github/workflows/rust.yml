@@ -29,13 +29,13 @@ jobs:
 
     - name: Use rust cache (Release)
       if: matrix.type == 'release'
-      uses: Swatinem/rust-cache@v1
+      uses: Swatinem/rust-cache@v2
       with:
           key: ${{ secrets.key }}
           
     - name: Use rust cache (Debug)
       if: matrix.type == 'debug'
-      uses: Swatinem/rust-cache@v1
+      uses: Swatinem/rust-cache@v2
       with:
           key: ${{ secrets.key }}-${{ matrix.type }}
     
