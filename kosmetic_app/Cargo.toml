@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 kosmetic_zx = { path = "../kosmetic_zx", default-features = true }
-tracing-tracy = { version = "0.7.0", optional = true }
+tracing-tracy = { version = "0.10.2", optional = true }
 tracing-subscriber = { version = "0.2", optional = true }
 tracing = { version = "0.1", optional = true }
 crossbeam-channel = "0.5.1"
